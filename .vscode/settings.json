@@ -1,0 +1,10 @@
+{
+  "python.defaultInterpreterPath": "C:/Users/<you>/miniconda3/envs/quant/python.exe",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportUnknownMemberType": "none",
+    "reportMissingTypeStubs": "none",
+    "reportAttributeAccessIssue": "none"
+  },
+  "python.terminal.activateEnvironment": true
+}
