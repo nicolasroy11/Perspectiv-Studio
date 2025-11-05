@@ -1,80 +1,72 @@
-import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+from __future__ import annotations
 from pathlib import Path
+import pandas as pd
+import plotly.express as px
+import plotly.io as pio
 
 
-def plot_historical_metrics(path: str | Path = "data/backtests/historical_metrics.parquet") -> None:
+def plot_historical_metrics(
+    path: str | Path,
+    save: bool = True,
+    show: bool = True,
+):
     """
-    Visualize historical rolling backtest metrics with an equity curve overlay.
-
-    Args:
-        path: Path to the parquet file produced by HistoricalRunner.
+    Load a historical backtest metrics file (.parquet or .json),
+    produce an interactive plotly line chart of win_rate and expectancy over time.
     """
-    df = pd.read_parquet(path)
+    path = Path(path)
 
-    # --- Compute equity curve from expectancy (proxy cumulative R) ---
-    df["cumulative_expectancy"] = df["expectancy"].cumsum()
+    # ----------------------------------------------------------------------
+    # Format detection
+    # ----------------------------------------------------------------------
+    if not path.exists():
+        raise FileNotFoundError(f"Metrics file not found: {path}")
 
-    # --- Setup subplots ---
-    fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.7, 0.3],
-        subplot_titles=("Performance Metrics", "Cumulative Expectancy (Equity Curve)")
-    )
-
-    # --- Metrics traces (win rate, expectancy, sharpe) ---
-    fig.add_trace(go.Scatter(
-        x=df["end"], y=df["win_rate"],
-        mode="lines+markers", name="Win Rate",
-        line=dict(color="lime", width=2)
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=df["end"], y=df["expectancy"],
-        mode="lines+markers", name="Expectancy (R/trade)",
-        line=dict(color="blue", width=2)
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=df["end"], y=df["sharpe_ratio"],
-        mode="lines+markers", name="Sharpe Ratio",
-        line=dict(color="purple", width=2)
-    ), row=1, col=1)
-
-    # --- Equity curve subplot ---
-    fig.add_trace(go.Scatter(
-        x=df["end"], y=df["cumulative_expectancy"],
-        mode="lines", name="Cumulative Expectancy",
-        line=dict(color="orange", width=3)
-    ), row=2, col=1)
-
-    # --- Layout ---
-    fig.update_layout(
-        title="Rolling Backtest Metrics + Equity Curve",
-        height=900,
-        template="plotly_white",
-        hovermode="x unified",
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-
-    fig.update_yaxes(title_text="Metric Value", row=1, col=1)
-    fig.update_yaxes(title_text="Cumulative R", row=2, col=1)
-    fig.update_xaxes(title_text="End Date", row=2, col=1)
-
-    import plotly.io as pio
-    pio.renderers.default = "browser"
-    fig.show()
-
-
-if __name__ == "__main__":
-    # direct debug-run support in VSCode
-    data_path = Path("data/backtests/historical_metrics.parquet")
-    if data_path.exists():
-        plot_historical_metrics(data_path)
+    suffix = path.suffix.lower()
+    if suffix == ".parquet":
+        df = pd.read_parquet(path)
+    elif suffix == ".json":
+        df = pd.read_json(path)
     else:
-        print(f"missing file: {data_path}")
+        raise ValueError(f"Unsupported file type: {suffix}")
+
+    # ----------------------------------------------------------------------
+    # Validate schema
+    # ----------------------------------------------------------------------
+    required_cols = {"end", "win_rate", "expectancy"}
+    if not required_cols.issubset(df.columns):
+        missing = required_cols - set(df.columns)
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # ----------------------------------------------------------------------
+    # Plotting
+    # ----------------------------------------------------------------------
+    fig = px.line(
+        df,
+        x="end",
+        y=["win_rate", "expectancy"],
+        title="Historical Backtest Metrics Over Time",
+        markers=True,
+        labels={"value": "Metric Value", "end": "Period End", "variable": "Metric"},
+    )
+
+    fig.update_layout(
+        height=600,
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+
+    # ----------------------------------------------------------------------
+    # Save / Show
+    # ----------------------------------------------------------------------
+    if save:
+        out_path = Path("data/backtests/metrics_chart.html")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.write_html(out_path)
+        print(f"✅ Saved metrics chart to {out_path}")
+
+    if show:
+        pio.renderers.default = "browser"
+        fig.show()
+
+    return fig
