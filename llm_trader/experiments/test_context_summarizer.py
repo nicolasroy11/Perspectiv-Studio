@@ -4,7 +4,7 @@ from llm_trader.intelligence.context_summarizer import ContextSummarizer
 
 
 # ---------------------------------------------------------------------
-# Load either 5M EURUSD
+# Load 5M EURUSD
 # ---------------------------------------------------------------------
 def load_data() -> pd.DataFrame:
     path = Path("data/raw/eurusd_5m.csv")
@@ -20,7 +20,7 @@ def load_data() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------
-# Main
+# Hookin' in
 # ---------------------------------------------------------------------
 def main():
     df = load_data()
