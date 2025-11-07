@@ -4,6 +4,8 @@ import os
 import requests
 import random
 
+import runtime_settings
+
 
 # ======================================================================
 # PROTOCOL
@@ -77,14 +79,14 @@ class OpenAILLM:
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        temperature: float | None = None,
-        seed: int | None = None,
+        temperature: float =0.2,
+        seed: int = 42,
     ) -> None:
         import openai
         self.model = model
-        self.temperature = temperature if temperature is not None else float(os.getenv("LLM_TEMPERATURE", "0"))
-        self.seed = seed if seed is not None else int(os.getenv("LLM_SEED", "42"))
-        self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.temperature = temperature
+        self.seed = seed
+        self.client = openai.OpenAI(api_key=runtime_settings.OPENAI_API_KEY)
 
     def __call__(self, prompt: str) -> str:
         completion = self.client.chat.completions.create(
