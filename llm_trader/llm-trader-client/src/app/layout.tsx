@@ -1,6 +1,7 @@
 import "./globals.css";
 import Providers from "./providers";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -11,10 +12,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-950 text-gray-100">
+      <body className="bg-perspectiv-dark text-perspectiv-text">
         <Providers>
           <Header />
-          {children}
+          <main className="px-8 pt-8 pb-20 max-w-7xl mx-auto">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>
