@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-from llm_trader.backend.routers import eval, ohlcv, eval_stats
+from web.backend.routers import eval, ohlcv, eval_stats
 
 app = FastAPI(title="LLM Trader Backend", version="0.1.0")
 
@@ -25,4 +25,4 @@ def root():
 
 
 if __name__ == "__main__":
-    uvicorn.run("llm_trader.backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("web.backend.main:app", host="0.0.0.0", port=8000, reload=True)

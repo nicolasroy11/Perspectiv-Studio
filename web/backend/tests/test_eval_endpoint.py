@@ -1,7 +1,7 @@
 from pathlib import Path
 from fastapi.testclient import TestClient
-from llm_trader.backend.main import app
-from llm_trader.backend.routers import eval as eval_router
+from web.backend.main import app
+from web.backend.routers import eval as eval_router
 
 client = TestClient(app)
 
@@ -25,7 +25,7 @@ def test_eval_endpoint_ok(monkeypatch, tmp_path):
     assert data["data"][0]["action"] == "ENTER"
 
 def test_eval_not_found(monkeypatch):
-    from llm_trader.backend.routers import eval as eval_router
+    from web.backend.routers import eval as eval_router
     monkeypatch.setattr(eval_router, "DATA_PATH", Path("nonexistent.parquet"))
     r = client.get("/api/eval")
     assert r.status_code == 404
