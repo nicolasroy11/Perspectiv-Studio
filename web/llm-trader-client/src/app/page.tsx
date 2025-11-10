@@ -1,7 +1,7 @@
 "use client";
 
 import { useOhlcvData, useEvalData } from "../lib/api";
-import CandleChart from "../components/CandleChart";
+import CandleChart from "../components/CandleChart.client";
 import StatsPanel from "../components/StatsPanel";
 
 

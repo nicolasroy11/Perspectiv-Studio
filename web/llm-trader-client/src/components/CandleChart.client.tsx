@@ -1,6 +1,9 @@
 "use client";
 
-import Plot from "react-plotly.js";
+import dynamic from "next/dynamic";
+
+// Dynamically import Plotly to prevent SSR crash (“self is not defined”)
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 interface CandleChartProps {
   priceData: any[];
@@ -17,9 +20,9 @@ export default function CandleChart({ priceData, decisionData }: CandleChartProp
     high: priceData.map((d) => d.high),
     low: priceData.map((d) => d.low),
     close: priceData.map((d) => d.close),
-    type: "candlestick",
+    type: "candlestick" as const,
     name: "Price",
-  };
+  } as any;
 
   // --- LLM Decision markers ---
   const decisionTraces = ["ENTER", "SKIP", "REVERSE"].map((act) => {
@@ -27,12 +30,11 @@ export default function CandleChart({ priceData, decisionData }: CandleChartProp
     return {
       x: subset.map((d) => d.end_time),
       y: subset.map((d) => {
-        // TODO: find matching close price for approximate marker placement; imoprove based on exact timestamp
         const candle = priceData.find((p) => p.timestamp >= d.end_time);
         return candle ? candle.close : priceData[priceData.length - 1].close;
       }),
-      mode: "markers",
-      type: "scatter",
+      mode: "markers" as const,
+      type: "scatter" as const,
       name: act,
       marker: {
         size: 8,
@@ -49,25 +51,27 @@ export default function CandleChart({ priceData, decisionData }: CandleChartProp
           `${act} | conf: ${(d.confidence ?? 0).toFixed(2)}\n${d.rationale}`
       ),
       hoverinfo: "text+x+y",
-    };
+    } as any;
   });
 
+  // --- Chart layout ---
   const layout = {
-    title: "LLM Trader — Price & Decisions",
+    title: { text: "LLM Trader — Price & Decisions" },
     plot_bgcolor: "#0f172a",
     paper_bgcolor: "#0f172a",
     font: { color: "#e2e8f0" },
     xaxis: {
       rangeslider: { visible: false },
-      title: "Time",
+      title: { text: "Time" },
     },
     yaxis: {
-      title: "Price",
+      title: { text: "Price" },
     },
     margin: { t: 60, l: 60, r: 20, b: 40 },
     height: 700,
-  };
+  } as any;
 
+  // --- Render Plotly chart ---
   return (
     <Plot
       data={[candleTrace, ...decisionTraces]}

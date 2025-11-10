@@ -4,3 +4,9 @@ runtime_settings.py
 data/eval/llm_decisions.parquet
 web/llm_trader_client/.next/*
 web/llm_trader_client/node_modules/*
+
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+crash.log
