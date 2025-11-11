@@ -1,4 +1,3 @@
-# llm_trader/backend/routers/ohlcv.py
 from fastapi import APIRouter, HTTPException
 from pathlib import Path
 import pandas as pd
