@@ -1,3 +1,3 @@
-output "frontend_bucket_url" {
-  value = aws_s3_bucket.frontend.website_endpoint
+output "frontend_bucket_website_url" {
+  value = aws_s3_bucket_website_configuration.frontend.website_endpoint
 }
