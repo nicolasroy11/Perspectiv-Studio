@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-from web.trader_backend.routers import eval, ohlcv, eval_stats
+from web.trader_backend.routers import backtest, eval, ohlcv, eval_stats
 
 app = FastAPI(title="LLM Trader Backend", version="0.1.0")
 
@@ -9,8 +9,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000", "http://127.0.0.1:3000",
-        "http://perspectiv-trader-frontend.s3-website-us-west-2.amazonaws.com",
-        "https://perspectiv-trader-frontend.s3-website-us-west-2.amazonaws.com"
+        "https://perspectivstudio.com",
+        "https://www.perspectivstudio.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(eval.router, prefix="/api", tags=["Evaluation"])
 app.include_router(ohlcv.router, prefix="/api", tags=["Price Data"])
 app.include_router(eval_stats.router)
+app.include_router(backtest.router)
 
 
 @app.get("/")

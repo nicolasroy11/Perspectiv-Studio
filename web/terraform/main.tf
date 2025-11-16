@@ -32,8 +32,8 @@ resource "aws_s3_object" "frontend_files" {
 
   bucket       = aws_s3_bucket.frontend.id
   key          = each.value
-  source       = "${path.module}/../client/out/${each.value}"
-  etag         = filemd5("${path.module}/../client/out/${each.value}")
+  source       = "${path.module}/../client/build/${each.value}"
+  etag         = filemd5("${path.module}/../client/build/${each.value}")
   content_type = lookup(
     {
       html = "text/html",
@@ -109,6 +109,19 @@ resource "aws_cloudfront_distribution" "frontend_cdn" {
     geo_restriction {
       restriction_type = "none"
     }
+  }
+
+  # === SPA FALLBACK for React/Vite routing any deeper than base url (hacky to me, but indeustry standard solution) ===
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+  }
+
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
   }
 
   price_class = "PriceClass_100"
@@ -315,7 +328,15 @@ resource "aws_autoscaling_group" "ecs_asg" {
   min_size            = 1
   max_size            = 2
   desired_capacity    = 1
-  vpc_zone_identifier = data.aws_subnets.default.ids
+  
+  # Use explicit, correct subnet IDs
+  vpc_zone_identifier = [
+    "subnet-03f1b56fbe01ffb17",
+    "subnet-0f2ccae322055341d",
+    "subnet-0013aae9ffee80508",
+    "subnet-0d951529f3fe938b7"
+  ]
+
   health_check_type   = "EC2"
 
   launch_template {
@@ -329,6 +350,7 @@ resource "aws_autoscaling_group" "ecs_asg" {
     propagate_at_launch = true
   }
 }
+
 
 resource "aws_ecs_capacity_provider" "cp" {
   name = "${var.project_name}-cp"
@@ -361,6 +383,10 @@ resource "aws_cloudwatch_log_group" "ecs_logs" {
   retention_in_days = 7
 }
 
+locals {
+  backend_tag = trimspace(file("${path.module}/../trader_backend/.backend_tag"))
+}
+
 resource "aws_ecs_task_definition" "backend_task" {
   family                   = "${var.project_name}-task"
   network_mode             = "bridge"
@@ -373,7 +399,7 @@ resource "aws_ecs_task_definition" "backend_task" {
   container_definitions = jsonencode([
     {
       name      = "backend",
-      image     = "${aws_ecr_repository.backend.repository_url}:latest",
+      image     = "${aws_ecr_repository.backend.repository_url}:${local.backend_tag}",
       essential = true,
       portMappings = [
         { containerPort = 8000, hostPort = 8000, protocol = "tcp" }
@@ -408,10 +434,12 @@ resource "aws_lb_target_group" "trader_tg" {
   target_type = "instance"
 
   health_check {
-    path              = "/"
+    path              = "/api/ohlcv"
     interval          = 30
     timeout           = 5
     healthy_threshold = 3
+    unhealthy_threshold = 3
+    matcher           = "200-299"
   }
 }
 
@@ -516,6 +544,33 @@ resource "aws_ecs_service" "backend_service" {
 
   depends_on = [aws_lb_listener.trader_listener]
 }
+
+data "aws_route_tables" "public" {
+  filter {
+    name   = "association.main"
+    values = ["true"]
+  }
+}
+
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "tag:aws-cdk:subnet-type"
+    values = ["Public"]
+  }
+}
+
+# data "aws_subnets" "public" {
+#   filter {
+#     name   = "vpc-id"
+#     values = [data.aws_vpc.default.id]
+#   }
+# }
+
 
 
 # Outputs

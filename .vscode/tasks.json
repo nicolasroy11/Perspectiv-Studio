@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: Docker Tag",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File",
+        "${workspaceFolder}/web/trader_backend/scripts/docker-tag.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/web/trader_backend"
+      }
+    }
+  ]
+}

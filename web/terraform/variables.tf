@@ -3,8 +3,8 @@ variable "aws_profile"  { default = "perspectiv" }
 variable "project_name" { default = "perspectiv-trader" }
 
 variable "key_name" {
-  description = "EC2 key pair name for SSH access"
-  type        = string
+  type    = string
+  default = "perspectiv-main-key"
 }
 
 variable "ssh_cidr" {
