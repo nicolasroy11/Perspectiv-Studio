@@ -8,7 +8,7 @@ class Position:
     entry_price: float
     tp_price: Optional[float]
     lot_size: float
-    direction: str = "long"  # future proof (“long” or “short”)
+    direction: str
     opened_at: datetime = datetime.now(timezone.utc)
 
     # These remain None until the position is closed
