@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import time
 from typing import List
 import requests
-from data.models.candle import Candle
+from models.candle import Candle
 import runtime_settings as rs
 
 
@@ -101,6 +101,52 @@ class TradeLockerClient:
 
         raw = r.json()
         return self.convert_history_response_to_candles(raw)
+    
+    from datetime import datetime, timezone
+
+    def get_candles_range(self, tradable_id: int, resolution: str, date_from: datetime, date_to: datetime,):
+        """
+        Fetch candles between two Python datetime objects.
+        Converts timestamps to Unix milliseconds as required by TradeLocker.
+        """
+
+        if not self.token:
+            self.authenticate()
+
+        # Ensure both datetimes are timezone-aware
+        if date_from.tzinfo is None:
+            date_from = date_from.replace(tzinfo=timezone.utc)
+        if date_to.tzinfo is None:
+            date_to = date_to.replace(tzinfo=timezone.utc)
+
+        from_ts = int(date_from.timestamp() * 1000)
+        to_ts = int(date_to.timestamp() * 1000)
+
+        url = f"{self.base_url}/trade/history"
+
+        headers = {
+            "accept": "application/json",
+            "Authorization": f"Bearer {self.token}",
+            "accNum": "1"
+        }
+
+        params = {
+            "routeId": "452",
+            "from": from_ts,
+            "to": to_ts,
+            "resolution": resolution,
+            "tradableInstrumentId": tradable_id
+        }
+
+        r = requests.get(url, headers=headers, params=params)
+
+        # print("DEBUG:", r.text)
+
+        if r.status_code != 200:
+            raise RuntimeError(f"Failed: {r.text}")
+
+        raw = r.json()
+        return self.convert_history_response_to_candles(raw)
 
     def convert_history_response_to_candles(self, data: dict) -> List[Candle]:
         if "barDetails" in data:
@@ -138,5 +184,5 @@ acc = client.get_all_accounts()
 inst = client.get_instruments(acc[0]['id'])
 
 eurusd_tid = 278
-candles = client.get_candles(tradable_id=eurusd_tid, resolution="1m", minutes=120)
+candles = client.get_candles(tradable_id=eurusd_tid, resolution="1m", minutes=1220)
 y = 0

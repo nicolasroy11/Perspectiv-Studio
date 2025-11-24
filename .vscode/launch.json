@@ -16,6 +16,19 @@
     },
 
     // -----------------------------------------------------
+    // Run tests
+    // -----------------------------------------------------
+    {
+      "name": "Python: Pytest Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-v"],
+      "console": "integratedTerminal",
+      "purpose": ["debug-test"]
+    },
+
+    // -----------------------------------------------------
     // BACKEND: Run Local Uvicorn
     // -----------------------------------------------------
     {
