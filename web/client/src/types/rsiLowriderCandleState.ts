@@ -6,24 +6,16 @@ export interface RsiLowriderCandleState {
   close: number;
   volume: number;
 
-  rsi: number;
-  rsi_was_below_buy: boolean;
-  rsi_curl: boolean;
+  current_rsi_value: number;
 
-  anchor_triggered: boolean;
-  rung_added: number | null;
   events: string[];
 
-  deepest_rung: number;
-  active_rungs: number;
-  pending_rungs: number;
+  num_active_rungs: number;
+  num_pending_rungs: number;
 
   num_active_trades: number;
   num_pending_trades: number;
   num_closed_trades: number;
-
-  entry_prices: number[];
-  tp_prices: number[];
 
   realized_pnl: number;
   unrealized_pnl: number;

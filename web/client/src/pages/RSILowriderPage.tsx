@@ -148,37 +148,59 @@ export function RSILowriderPage() {
         {/* SECTION 4 - EXPECTED VALUE */}
         {/* ======================= */}
 
+        {/* ======================= */}
+        {/* SECTION 4 - EXPECTED VALUE */}
+        {/* ======================= */}
+
         <DetailSection
           number={4}
-          title="The Math Behind the Profit Expectation"
+          title="Understanding the Math Behind Profit Expectation"
           delay={0.3}
         >
           <p>
-            Your live trading stats reflect a strong positive expectation:
+            Every trading strategy — including RSI Lowrider — can be evaluated using a
+            concept from probability theory called <strong>Expected Value (EV)</strong>.
+            EV tells you, on average, how much you can expect to win or lose per trade
+            over the long run.
+          </p>
+
+          <p className="mt-4">
+            EV is calculated using only four numbers:
           </p>
 
           <ul className="list-disc list-inside ml-4 mt-3 space-y-1">
-            <li>Win probability: <strong>0.88</strong></li>
-            <li>Average win: <strong>$11.81</strong></li>
-            <li>Loss probability: <strong>0.12</strong></li>
-            <li>Average loss: <strong>$5.38</strong></li>
+            <li><strong>Win Probability (W%)</strong> — how often trades end in profit</li>
+            <li><strong>Average Win</strong> — the average profit of winning trades</li>
+            <li><strong>Loss Probability (L%)</strong> — how often trades end in loss</li>
+            <li><strong>Average Loss</strong> — the average size of losing trades</li>
           </ul>
+
+          <p className="mt-4">
+            The Expected Value formula is:
+          </p>
 
           <div className="bg-card border border-border/30 rounded-lg p-6 shadow-lg shadow-primary/5 mt-4">
             <MathFormula
-              formula="E = (0.88)(11.81) - (0.12)(5.38)"
-              block
-            />
-            <MathFormula
-              formula="E \approx 10.39 - 0.64 = +9.75"
+              formula="EV = (W\% \times \text{Average Win}) - (L\% \times \text{Average Loss})"
               block
             />
           </div>
 
           <p className="mt-4">
-            This is a very strong EV for a high-frequency FX strategy.
+            A strategy with a <strong>positive EV</strong> is, by definition, a strategy
+            that should produce profit over many trades — even though individual trades
+            may vary. A <strong>negative EV</strong> means the system loses money on
+            average and is not sustainable long-term.
+          </p>
+
+          <p className="mt-4">
+            When you run a backtest on RSI Lowrider (or any rules-based strategy),
+            the system automatically computes all four EV components using your selected
+            date range. This gives you a transparent, quantitative way to evaluate
+            the strength of the strategy in different market conditions.
           </p>
         </DetailSection>
+
 
         {/* ======================= */}
         {/* SECTION 6 - HARVESTING */}

@@ -8,7 +8,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { path: '/', label: 'Home' },
     { path: '/trading', label: 'Trading' },
     { path: '/music', label: 'Music' },
-    { path: '/about', label: 'About' },
+    // { path: '/about', label: 'About' },
   ];
 
   return (

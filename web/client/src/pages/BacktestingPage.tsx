@@ -143,12 +143,12 @@ export function BacktestingPage() {
     switch (tradingType) {
       case "rsi-lowrider":
         return <TrendingUp className="h-4 w-4" />;
-      case "rules-based":
-        return <TrendingUp className="h-4 w-4" />;
-      case "rl":
-        return <Brain className="h-4 w-4" />;
-      case "llm":
-        return <Sparkles className="h-4 w-4" />;
+      // case "rules-based":
+      //   return <TrendingUp className="h-4 w-4" />;
+      // case "rl":
+      //   return <Brain className="h-4 w-4" />;
+      // case "llm":
+      //   return <Sparkles className="h-4 w-4" />;
       default:
         return null;
     }
