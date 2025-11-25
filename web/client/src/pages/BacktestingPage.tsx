@@ -29,6 +29,8 @@ import {
 import { motion } from "motion/react";
 import { RulesBasedParams } from "../components/RulesBasedParams";
 import { RLParams } from "../components/RLParams";
+import { RSILowriderParams } from "../components/RsiLowriderParams";
+import RsiLowriderCandleChart from "../components/RsiLowriderCandleChart";
 
 export function BacktestingPage() {
   const [asset, setAsset] = useState<string>("");
@@ -38,9 +40,14 @@ export function BacktestingPage() {
   const [dateTo, setDateTo] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const [backtestResult, setBacktestResult] = useState<any | null>(null); // RsiLowriderCandleState
+
   // Rules-based parameters
   const [rsiEnabled, setRsiEnabled] = useState(false);
-  const [rsiValue, setRsiValue] = useState("14");
+  const [rsiPeriod, setRsiPeriod] = useState("14");
+  const [rsiOversoldLevel, setRsiOversoldLevel] = useState("30");
+  const [rungSizeInPips, setRungSizeInPips] = useState("2.0");
+  const [tpTargetInPips, setTpTargetInPips] = useState("2,0");
   const [emaEnabled, setEmaEnabled] = useState(false);
   const [emaShortPeriod, setEmaShortPeriod] = useState("12");
   const [emaLongPeriod, setEmaLongPeriod] = useState("26");
@@ -57,22 +64,39 @@ export function BacktestingPage() {
       frequency,
       dateFrom,
       dateTo,
+      rsiEnabled,
+      rsiPeriod,
+      rsiOversoldLevel,
+      rungSizeInPips,
+      tpTargetInPips,
+      emaEnabled,
+      emaShortPeriod,
+      emaLongPeriod
     };
 
     if (tradingType === "rules-based") {
-      params.rulesBased = {
-        rsi: rsiEnabled
-          ? { enabled: true, period: parseInt(rsiValue) }
-          : { enabled: false },
-        emaCrossover: emaEnabled
+      params.rsiPeriod = rsiEnabled
+          ? { enabled: true, period: parseInt(rsiPeriod) }
+          : { enabled: false };
+      params.emaCrossover = emaEnabled
           ? {
               enabled: true,
               shortPeriod: parseInt(emaShortPeriod),
               longPeriod: parseInt(emaLongPeriod),
             }
-          : { enabled: false },
+          : { enabled: false };
       };
-    }
+
+    if (tradingType === "rsi-lowrider") {
+      params.asset = asset;
+      params.frequency = frequency;
+      params.dateFrom = dateFrom;
+      params.dateTo = dateTo;
+      params.rsiPeriod = parseInt(rsiPeriod);
+      params.rsiOversoldLevel = parseInt(rsiOversoldLevel);
+      params.rungSizeInPips = parseFloat(rungSizeInPips);
+      params.tpTargetInPips = parseFloat(tpTargetInPips);
+    };
 
     if (tradingType === "rl") {
       params.rl = {
@@ -84,8 +108,8 @@ export function BacktestingPage() {
       console.log("Sending to backend:", params);
 
       const res = await fetch(
-        "https://trader-api.perspectivstudio.com/api/backtest/run",
-        // "http://localhost:8000/api/backtest/run",
+        // "https://trader-api.perspectivstudio.com/api/backtest/run",
+        "http://localhost:8000/api/backtest/run",
         {
           method: "POST",
           headers: {
@@ -100,6 +124,7 @@ export function BacktestingPage() {
       }
 
       const data = await res.json();
+      setBacktestResult(data);
       console.log("BACKTEST RESULT:", data);
 
       // TODO: forward 'data' into a results page or widget
@@ -116,12 +141,14 @@ export function BacktestingPage() {
 
   const getTradingTypeIcon = () => {
     switch (tradingType) {
-      case "rules-based":
+      case "rsi-lowrider":
         return <TrendingUp className="h-4 w-4" />;
-      case "rl":
-        return <Brain className="h-4 w-4" />;
-      case "llm":
-        return <Sparkles className="h-4 w-4" />;
+      // case "rules-based":
+      //   return <TrendingUp className="h-4 w-4" />;
+      // case "rl":
+      //   return <Brain className="h-4 w-4" />;
+      // case "llm":
+      //   return <Sparkles className="h-4 w-4" />;
       default:
         return null;
     }
@@ -215,10 +242,10 @@ export function BacktestingPage() {
                   <SelectValue placeholder="Select a trading type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="rules-based">
+                  <SelectItem value="rsi-lowrider">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4" />
-                      Rules based
+                      RSI Lowrider
                     </div>
                   </SelectItem>
                   <SelectItem value="rl">
@@ -243,10 +270,7 @@ export function BacktestingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <label
-                htmlFor="frequency"
-                className="text-sm text-muted-foreground flex items-center gap-2"
-              >
+              <label htmlFor="frequency" className="text-sm text-muted-foreground flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Frequency
               </label>
@@ -263,12 +287,8 @@ export function BacktestingPage() {
                 <SelectContent>
                   <SelectItem value="1m">1 minute</SelectItem>
                   <SelectItem value="5m">5 minutes</SelectItem>
-                  <SelectItem value="15m">
-                    15 minutes
-                  </SelectItem>
-                  <SelectItem value="30m">
-                    30 minutes
-                  </SelectItem>
+                  <SelectItem value="15m">15 minutes</SelectItem>
+                  <SelectItem value="30m">30 minutes</SelectItem>
                   <SelectItem value="1h">1 hour</SelectItem>
                   <SelectItem value="4h">4 hours</SelectItem>
                 </SelectContent>
@@ -326,17 +346,30 @@ export function BacktestingPage() {
               <Separator className="my-6" />
               <RulesBasedParams
                 rsiEnabled={rsiEnabled}
-                rsiValue={rsiValue}
+                rsiValue={rsiPeriod}
                 emaEnabled={emaEnabled}
                 emaShortPeriod={emaShortPeriod}
                 emaLongPeriod={emaLongPeriod}
                 onRsiEnabledChange={setRsiEnabled}
-                onRsiValueChange={setRsiValue}
+                onRsiValueChange={setRsiPeriod}
                 onEmaEnabledChange={setEmaEnabled}
                 onEmaShortPeriodChange={setEmaShortPeriod}
                 onEmaLongPeriodChange={setEmaLongPeriod}
               />
             </>
+          )}
+
+          {tradingType === "rsi-lowrider" && (
+            <RSILowriderParams
+              rsiPeriod={rsiPeriod}
+              oversoldLevel={rsiOversoldLevel}
+              rungSize={rungSizeInPips}
+              tpSize={tpTargetInPips}
+              onRsiPeriodChange={setRsiPeriod}
+              onOversoldLevelChange={setRsiOversoldLevel}
+              onRungSizeChange={setRungSizeInPips}
+              onTpSizeChange={setTpTargetInPips}
+            />
           )}
 
           {tradingType === "rl" && (
@@ -457,7 +490,7 @@ export function BacktestingPage() {
                             variant="secondary"
                             className="bg-primary/10 text-primary border-primary/20"
                           >
-                            RSI: {rsiValue}
+                            RSI: {rsiPeriod}
                           </Badge>
                         )}
                         {emaEnabled && (
@@ -495,6 +528,9 @@ export function BacktestingPage() {
           )}
         </CardContent>
       </Card>
+      {tradingType === "rsi-lowrider" && backtestResult && (
+        <RsiLowriderCandleChart data={backtestResult.series} />
+      )}
     </div>
   );
 }

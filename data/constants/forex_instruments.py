@@ -1,4 +1,4 @@
-from data.models.forex_instrument import ForexInstrument
+from models.forex_instrument import ForexInstrument
 
 
 class ForexInstruments:

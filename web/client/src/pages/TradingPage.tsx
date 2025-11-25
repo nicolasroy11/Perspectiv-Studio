@@ -85,7 +85,7 @@ export function TradingPage() {
                             className="overflow-hidden"
                           >
                             <div className="ml-6 space-y-1 pt-1">
-                              <Link
+                              {/* <Link
                                 to="/trading/theories/bell-curve-martingale"
                                 className={`block px-3 py-2 rounded-md text-sm transition-colors ${
                                   isActive('/trading/theories/bell-curve-martingale')
@@ -94,7 +94,7 @@ export function TradingPage() {
                                 }`}
                               >
                                 Bell Curve Martingale
-                              </Link>
+                              </Link> */}
                               <Link
                                 to="/trading/theories/rsi-lowrider"
                                 className={`block px-3 py-2 rounded-md text-sm transition-colors ${

@@ -1,5 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
+@import 'katex/dist/katex.min.css';
+
 :root {
   --font-size: 16px;
   --background: #0b0d12;
@@ -196,4 +198,24 @@
 
 html {
   font-size: var(--font-size);
+}
+
+/* KaTeX styling for dark theme */
+.katex {
+  color: var(--foreground);
+}
+
+.katex .mord,
+.katex .mbin,
+.katex .mrel,
+.katex .mop,
+.katex .mopen,
+.katex .mclose,
+.katex .mpunct,
+.katex .minner {
+  color: var(--foreground);
+}
+
+.katex .text {
+  color: var(--muted-foreground);
 }
