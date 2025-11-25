@@ -25,6 +25,14 @@ class BacktestResult:
     equity_curve: list[float]
     positions: List[Position]
     trades: List[Trade]
+    
+@dataclass
+class PositionEvents:
+    ANCHOR = 'ANCHOR'
+    TP_HIT = 'TP_HIT'
+    RUNG_ADDED = 'RUNG_ADDED'
+    RUNG_FILLED = 'RUNG_FILLED'
+    POSITION_CLOSED = 'POSITION_CLOSED'
 
 
 class RSILowriderBacktester:
@@ -59,78 +67,132 @@ class RSILowriderBacktester:
         return candles
     
     async def get_backtest_results(self, request: RsiLowriderBacktestRequest) -> LowriderBacktestResultsDto:
-        """
-        Main entry point for API-level backtesting.
-        Accepts a BacktestRequest and returns the DTO used by the front-end.
-        """
-        
+
+        # -------------------------
+        # 1. Strategy config
+        # -------------------------
         config = RSILowriderConfig(
             rsi_period=request.rsi_period,
             rsi_oversold_level=request.rsi_oversold_level,
             rung_size_in_pips=request.rung_size_in_pips,
             tp_target_in_pips=request.tp_target_in_pips,
         )
-        strategy = RSILowriderStrategy(config)
 
-        # --------------------------
-        # 2. Load candles in range
-        # --------------------------
+        strategy = RSILowriderStrategy(config)
         broker = BacktestBroker()
 
-        # candles = broker.get_candles_range_from_tradelocker(
-        #     symbol=request.asset,
-        #     resolution=request.frequency,
-        #     date_from=request.date_from,
-        #     date_to=request.date_to
-        # )
-        
+        # -------------------------
+        # 2. Load candles
+        # -------------------------
         import os
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        CSV_PATH = os.path.join(BASE_DIR, "../../../data/raw/lowrider_1m_backtest_tradelocker_output.csv")
+        CSV_PATH = os.path.join(
+            BASE_DIR,
+            "../../../data/raw/lowrider_1m_backtest_tradelocker_output.csv"
+        )
+
         candles = broker.get_candles_range_from_csv(
             file_path=CSV_PATH,
             resolution=request.frequency,
             date_from=request.date_from,
             date_to=request.date_to
-            )
+        )
 
         series: list[LowriderCandleState] = []
 
-        # --------------------------
-        # 3. Main simulation loop
-        # --------------------------
+        # ------------------------------------------------------------
+        # EVENT TRACKING SUPPORT
+        # ------------------------------------------------------------
+
+        def detect_anchor(previous_position_state, current_position_state) -> bool:
+            """Position went from None → active (first trade is anchor). In other words, a position was just opened."""
+            return previous_position_state is None and current_position_state is not None
+
+        def detect_tp_hit(previous_num_closed_trades, current_num_closed_trades) -> bool: 
+            """Closed-trade count increased → TP triggered."""
+            if current_num_closed_trades > previous_num_closed_trades:
+                t = 0
+            return current_num_closed_trades > previous_num_closed_trades
+
+        # For detecting rung creation and fills:
+        def count_pending_rungs(position: Position):
+            if not position:
+                return 0
+            return sum(1 for t in position.trades if t.is_pending)
+
+        def count_active_rungs(position: Position):
+            if not position:
+                return 0
+            return sum(1 for t in position.trades if not t.is_pending and t.exit_price is None)
+
+        # Track previous state for event comparisons
+        previous_position = None
+        previous_num_closed_trades = 0
+        previous_pending_rungs = 0
+
+        # ============================================================
+        # 3. MAIN LOOP
+        # ============================================================
         for candle in candles:
-            
+
+            # Order: STRATEGY FIRST, then BROKER processing
+            strategy.on_candle_just_closed(broker, candle)
             broker.process_candle(candle)
-            strategy.on_candle(broker, candle)
 
-            # Compute RSI manually for DTO
-            closes = [c.close for c in strategy._candles]
-            if len(closes) >= config.rsi_period + 1:
-                rsi_series = ta.rsi(pd.Series(closes), length=config.rsi_period)
-                rsi = float(rsi_series.iloc[-1])
-            else:
-                rsi = 0.0
+            # -------------------------
+            # Compute RSI for DTO
+            # -------------------------
+            rsi_value = strategy.rsi_list[-1] if strategy.rsi_list else 0.0
 
-            position = broker.get_active_position()
+            # -------------------------
+            # Current broker state
+            # -------------------------
+            current_position = broker.get_active_position()
             active_trades = broker.get_open_trades()
 
-            # Snapshot counts
-            num_active = len([t for t in active_trades if not t.is_pending])
-            num_pending = len([t for t in active_trades if t.is_pending])
-            num_closed = sum(1 for p in broker.positions for t in p.trades if t.exit_price is not None)
+            num_active_trades = len([t for t in active_trades if not t.is_pending])
+            num_pending_trades = len([t for t in active_trades if t.is_pending])
+            current_num_closed_trades = sum(
+                1 for p in broker.positions for t in p.trades if t.exit_price is not None
+            )
 
-            # Equity
-            unreal = broker.unrealized_pnl(candle.close)
-            real = broker.realized_pnl()
-            equity = real + unreal
+            # Rungs
+            num_active_rungs = count_active_rungs(current_position)
+            num_pending_rungs = count_pending_rungs(current_position)
 
-            # Ladder depth
-            deepest = max((t.ladder_position for t in active_trades), default=0)
+            # PnL & Equity
+            unrealized_pnl = broker.unrealized_pnl(candle.close)
+            realized_pnl = broker.realized_pnl()
+            equity = realized_pnl + unrealized_pnl
 
-            # --------------------------
-            # Build DTO entry
-            # --------------------------
+            # -------------------------
+            # EVENT DETECTION
+            # -------------------------
+            events: list[str] = []
+
+            # Detect anchor
+            if detect_anchor(previous_position, current_position):
+                events.append(PositionEvents.ANCHOR)
+
+            # Detect TP hit
+            if detect_tp_hit(previous_num_closed_trades, current_num_closed_trades):
+                events.append(PositionEvents.TP_HIT)
+
+            # Detect rung creation (increase in pending trades)
+            if current_position and num_pending_rungs > previous_pending_rungs:
+                events.append(PositionEvents.RUNG_ADDED)
+
+            # Detect rung filled (pending reduced because one filled)
+            if current_position and num_pending_rungs < previous_pending_rungs:
+                events.append(PositionEvents.RUNG_FILLED)
+
+            # Detect full close
+            if previous_position is not None and current_position is None:
+                events.append(PositionEvents.POSITION_CLOSED)
+
+            # -------------------------
+            # Store the candle state
+            # -------------------------
             state = LowriderCandleState(
                 timestamp=str(candle.timestamp),
                 open=candle.open,
@@ -139,34 +201,37 @@ class RSILowriderBacktester:
                 close=candle.close,
                 volume=candle.volume,
 
-                rsi=rsi,
-                rsi_was_below_buy=strategy._last_rsi <= strategy.config.rsi_oversold_level,
-                rsi_curl=(rsi > strategy._last_rsi),
+                current_rsi_value=rsi_value,
+                events=events,
 
-                anchor_triggered=False,      # you can patch when implementing event capture
-                rung_added=None,
-                events=[],                   # TODO: wire events
+                num_active_rungs=num_active_rungs,
+                num_pending_rungs=num_pending_rungs,
 
-                deepest_rung=deepest,
-                active_rungs=num_active,
-                pending_rungs=num_pending,
+                num_active_trades=num_active_trades,
+                num_pending_trades=num_pending_trades,
+                num_closed_trades=current_num_closed_trades,
 
-                num_active_trades=num_active,
-                num_pending_trades=num_pending,
-                num_closed_trades=num_closed,
-
-                entry_prices=[t.entry_price for t in active_trades],
-                tp_prices=[t.tp_price for t in active_trades if t.tp_price],
-
-                realized_pnl=real,
-                unrealized_pnl=unreal,
+                realized_pnl=realized_pnl,
+                unrealized_pnl=unrealized_pnl,
                 equity=equity,
             )
 
             series.append(state)
 
-        # Return final bundle
-        return LowriderBacktestResultsDto(series=series)
+            # -------------------------
+            # Update previous snapshot
+            # -------------------------
+            previous_position = current_position
+            previous_num_closed_trades = current_num_closed_trades
+            previous_pending_rungs = num_pending_rungs
+
+        # Wrap result
+        dto = LowriderBacktestResultsDto(series=series)
+
+        # Save if needed
+        self.save_backtest_results_to_json(dto)
+
+        return dto
 
     # ------------------------------------------------------------
     # MAIN BACKTEST LOOP
@@ -176,15 +241,15 @@ class RSILowriderBacktester:
         broker = BacktestBroker(symbol=self.instrument.symbol)
         candles = self.load_csv(csv_path)
 
-        equity_curve = []
-        all_positions = []
-        all_trades = []
+        equity_curve: List[float] = []
+        all_positions: List[Position] = []
+        all_trades: List[Trade] = []
 
         for candle in candles:
 
             # Key: position & trade processing happens AFTER strategy logic
             # but BEFORE we compute unrealized PnL
-            self.strategy.on_candle(broker, candle)
+            self.strategy.on_candle_just_closed(broker, candle)
             broker.process_candle(candle)
 
             # Build equity: realized + unrealized
@@ -289,68 +354,109 @@ class RSILowriderBacktester:
 
         return result
 
-    def _build_candle_state(
-        self,
-        candle: Candle,
-        broker: BacktestBroker,
-        rsi: float,
-        rsi_was_below_buy: bool,
-        rsi_curl: bool,
-        anchor_triggered: bool,
-        rung_added: int | None,
-        events: list[str],
-    ):
-        """Create a LowriderCandleState snapshot for this candle."""
+    # def _build_candle_state(
+    #     self,
+    #     candle: Candle,
+    #     broker: BacktestBroker,
+    #     rsi: float,
+    #     rsi_was_below_buy: bool,
+    #     rsi_curl: bool,
+    #     anchor_triggered: bool,
+    #     rung_added: int | None,
+    #     events: list[str],
+    # ):
+    #     """Create a LowriderCandleState snapshot for this candle."""
 
-        position = broker.get_active_position()
-        trades = position.trades if position else []
+    #     position = broker.get_active_position()
+    #     trades = position.trades if position else []
 
-        active_trades = [t for t in trades if t.exit_price is None and not t.is_pending]
-        pending_trades = [t for t in trades if t.is_pending]
-        closed_trades = [t for t in trades if t.exit_price is not None]
+    #     active_trades = [t for t in trades if t.exit_price is None and not t.is_pending]
+    #     pending_trades = [t for t in trades if t.is_pending]
+    #     closed_trades = [t for t in trades if t.exit_price is not None]
 
-        realized = sum(t.realized_pnl or 0 for t in closed_trades)
-        unreal = 0.0
-        if position:
-            last_close = candle.close
-            for t in active_trades:
-                unreal += (last_close - t.entry_price) * t.lot_size * 10000 * 0.1  # simplified
+    #     realized = sum(t.realized_pnl or 0 for t in closed_trades)
+    #     unreal = 0.0
+    #     if position:
+    #         last_close = candle.close
+    #         for t in active_trades:
+    #             unreal += (last_close - t.entry_price) * t.lot_size * 10000 * 0.1  # simplified
 
-        equity = realized + unreal
+    #     equity = realized + unreal
 
-        # deepest rung = max ladder_position among trades (even pending)
-        deepest_rung = max((t.ladder_position for t in trades), default=0)
+    #     # deepest rung = max ladder_position among trades (even pending)
+    #     deepest_rung = max((t.ladder_position for t in trades), default=0)
 
-        return LowriderCandleState(
-            timestamp=str(candle.timestamp),
-            open=candle.open,
-            high=candle.high,
-            low=candle.low,
-            close=candle.close,
-            volume=candle.volume,
+    #     return LowriderCandleState(
+    #         timestamp=str(candle.timestamp),
+    #         open=candle.open,
+    #         high=candle.high,
+    #         low=candle.low,
+    #         close=candle.close,
+    #         volume=candle.volume,
 
-            rsi=rsi,
-            rsi_was_below_buy=rsi_was_below_buy,
-            rsi_curl=rsi_curl,
+    #         rsi=rsi,
+    #         is_last_rsi_below_buy_threshold=rsi_was_below_buy,
+    #         is_current_rsi_above_last=rsi_curl,
 
-            anchor_triggered=anchor_triggered,
-            rung_added=rung_added,
-            events=events,
+    #         anchor_triggered=anchor_triggered,
+    #         rung_added=rung_added,
+    #         events=events,
 
-            deepest_rung=deepest_rung,
-            active_rungs=len(active_trades),
-            pending_rungs=len(pending_trades),
+    #         deepest_rung=deepest_rung,
+    #         num_active_rungs=len(active_trades),
+    #         num_pending_rungs=len(pending_trades),
 
-            num_active_trades=len(active_trades),
-            num_pending_trades=len(pending_trades),
-            num_closed_trades=len(closed_trades),
-            entry_prices=[t.entry_price for t in active_trades],
-            tp_prices=[t.tp_price for t in active_trades if t.tp_price is not None],
+    #         num_active_trades=len(active_trades),
+    #         num_pending_trades=len(pending_trades),
+    #         num_closed_trades=len(closed_trades),
+    #         entry_prices=[t.entry_price for t in active_trades],
+    #         tp_prices=[t.tp_price for t in active_trades if t.tp_price is not None],
 
-            realized_pnl=realized,
-            unrealized_pnl=unreal,
-            equity=equity,
-        )
+    #         realized_pnl=realized,
+    #         unrealized_pnl=unreal,
+    #         equity=equity,
+    #     )
+        
+    def _json_safe(self, value: LowriderBacktestResultsDto):
+        """
+        Convert datetimes, pandas timestamps, dataclasses, and lists
+        into JSON-serializable structures.
+        """
+        from dataclasses import asdict, is_dataclass
+        from datetime import datetime
+        import pandas as pd
+        from typing import Any
+        # datetime → ISO string
+        if isinstance(value, (datetime, pd.Timestamp)):
+            return value.isoformat()
+
+        # dataclass → dict
+        if is_dataclass(value):
+            return {k: self._json_safe(v) for k, v in asdict(value).items()}
+
+        # list → list of safe values
+        if isinstance(value, list):
+            return [self._json_safe(v) for v in value]
+
+        # everything else returned as-is
+        return value
+
+
+    def save_backtest_results_to_json(self, dto):
+        """
+        Serialize a LowriderBacktestResultsDto to a JSON file safely.
+        Converts timestamps and nested dataclasses properly.
+        """
+        import os
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        CSV_PATH = os.path.join(BASE_DIR, "../../../data/raw/lowrider_backtest_output.json")
+        import json
+        safe_dict = self._json_safe(dto)
+
+        with open(CSV_PATH, "w") as f:
+            json.dump(safe_dict, f, indent=2)
+
+        return CSV_PATH
 
         
 
