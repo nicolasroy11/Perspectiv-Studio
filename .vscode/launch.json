@@ -19,7 +19,7 @@
     // Run tests
     // -----------------------------------------------------
     {
-      "name": "Python: Pytest Current File",
+      "name": "Pytest",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
