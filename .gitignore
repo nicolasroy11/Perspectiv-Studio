@@ -9,3 +9,4 @@ web/client/node_modules/*
 terraform.tfstate
 terraform.tfstate.*
 crash.log
+/web/client/build
