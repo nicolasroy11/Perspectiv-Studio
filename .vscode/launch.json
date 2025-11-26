@@ -75,6 +75,17 @@
     },
 
     // -----------------------------------------------------
+    // BACKEND: Build local image of backend in current state
+    // -----------------------------------------------------
+    {
+      "name": "Backend: Build Local Image",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/web/trader_backend/scripts/build-local-image.ps1",
+      "args": []
+    },
+
+    // -----------------------------------------------------
     // BACKEND: Build & Push Image of backend in its current state
     // -----------------------------------------------------
     {
