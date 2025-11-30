@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass
 class ForexInstrument:
     symbol: str
     pip_size: float            # minimum price movement (pip definition)
