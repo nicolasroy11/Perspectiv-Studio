@@ -26,10 +26,6 @@ class Session:
         Outer loop = Session loop (runs forever)
         Inside it, we run a Cycle loop.
         """
-        # first_sleep: float = self.seconds_until_next_boundary(config.INTERVAL_MINUTES)
-        # print(f"Aligning to next boundary in {first_sleep:.1f} seconds...")
-        # await asyncio.sleep(first_sleep)
-
         while True:
             await self.run_cycle()
 
@@ -45,7 +41,7 @@ class Session:
 
         # Mark the start of THIS cycle
         self.current_cycle_start: datetime = datetime.now(timezone.utc)
-        self.current_cycle_id = f"RSILR_{str(self.current_cycle_start)[:18]}"
+        self.current_cycle_id = f"RSILR_{str(self.current_cycle_start)[:19]}"
         print(f"\n=== New Cycle started at {self.current_cycle_start} ===")
 
         loop_num = 0
@@ -79,8 +75,7 @@ class Session:
         # -------------------------------------------------
         now: datetime = datetime.now(timezone.utc)
         snapshot: AccountSnapshot = self.broker.get_account_snapshot(
-            # date_from=self.current_cycle_start,
-            date_from=self.current_cycle_start - timedelta(days=4),
+            date_from=self.current_cycle_start,
             date_to=now
         )
 
