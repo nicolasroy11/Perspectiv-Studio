@@ -11,10 +11,10 @@ from brokers.tradelocker import TradeLockerBroker
 from models.candle import Candle
 from models.forex_instrument import ForexInstrument
 from brokers.backtest import BacktestBroker
-from models.position import Position
+from models.cycle import Cycle
 from models.trade import Trade
 from strategies.rules_based.rsi_lowrider.dto.backtest_results_dto import LowriderBacktestResultsDto, LowriderCandleState
-from strategies.rules_based.rsi_lowrider.strategy import RSILowriderStrategy, RSILowriderConfig
+from strategies.rules_based.rsi_lowrider.strategy import RSILowriderStrategy
 from strategies.rules_based.rsi_lowrider.logger import BacktestLogger
 from web.trader_backend.schemas.backtest import BacktestRequest, RsiLowriderBacktestRequest
 
@@ -23,7 +23,7 @@ from web.trader_backend.schemas.backtest import BacktestRequest, RsiLowriderBack
 class BacktestResult:
     candles: list[Candle]
     equity_curve: list[float]
-    positions: List[Position]
+    positions: List[Cycle]
     trades: List[Trade]
     
 @dataclass
@@ -37,8 +37,8 @@ class PositionEvents:
 
 class RSILowriderBacktester:
 
-    def __init__(self, config: RSILowriderConfig = RSILowriderConfig()):
-        self.strategy = RSILowriderStrategy(config)
+    def __init__(self):
+        self.strategy = RSILowriderStrategy()
         self.instrument = ForexInstrument(
                             symbol="EURUSD",
                             pip_size=0.0001,
@@ -68,17 +68,7 @@ class RSILowriderBacktester:
     
     async def get_backtest_results(self, request: RsiLowriderBacktestRequest) -> LowriderBacktestResultsDto:
 
-        # -------------------------
-        # 1. Strategy config
-        # -------------------------
-        config = RSILowriderConfig(
-            rsi_period=request.rsi_period,
-            rsi_oversold_level=request.rsi_oversold_level,
-            rung_size_in_pips=request.rung_size_in_pips,
-            tp_target_in_pips=request.tp_target_in_pips,
-        )
-
-        strategy = RSILowriderStrategy(config)
+        strategy = RSILowriderStrategy()
         broker = BacktestBroker()
 
         # -------------------------
@@ -115,15 +105,15 @@ class RSILowriderBacktester:
             return current_num_closed_trades > previous_num_closed_trades
 
         # For detecting rung creation and fills:
-        def count_pending_rungs(position: Position):
+        def count_pending_rungs(position: Cycle):
             if not position:
                 return 0
-            return sum(1 for t in position.trades if t.is_pending)
+            return sum(1 for t in position.positions if t.is_pending)
 
-        def count_active_rungs(position: Position):
+        def count_active_rungs(position: Cycle):
             if not position:
                 return 0
-            return sum(1 for t in position.trades if not t.is_pending and t.exit_price is None)
+            return sum(1 for t in position.positions if not t.is_pending and t.exit_price is None)
 
         # Track previous state for event comparisons
         previous_position = None
@@ -147,13 +137,13 @@ class RSILowriderBacktester:
             # -------------------------
             # Current broker state
             # -------------------------
-            current_position = broker.get_active_position()
+            current_position = broker.get_active_cycle()
             active_trades = broker.get_open_trades()
 
             num_active_trades = len([t for t in active_trades if not t.is_pending])
             num_pending_trades = len([t for t in active_trades if t.is_pending])
             current_num_closed_trades = sum(
-                1 for p in broker.positions for t in p.trades if t.exit_price is not None
+                1 for p in broker.positions for t in p.positions if t.exit_price is not None
             )
 
             # Rungs
@@ -242,7 +232,7 @@ class RSILowriderBacktester:
         candles = self.load_csv(csv_path)
 
         equity_curve: List[float] = []
-        all_positions: List[Position] = []
+        all_positions: List[Cycle] = []
         all_trades: List[Trade] = []
 
         for candle in candles:
@@ -253,7 +243,7 @@ class RSILowriderBacktester:
             broker.process_candle(candle)
 
             # Build equity: realized + unrealized
-            pos = broker.get_active_position()
+            pos = broker.get_active_cycle()
 
             if pos is None:
                 equity_curve.append(0.0)
@@ -265,7 +255,7 @@ class RSILowriderBacktester:
         # snapshot finished trades
         for p in broker.positions:
             all_positions.append(p)
-            for t in p.trades:
+            for t in p.positions:
                 all_trades.append(t)
                 
         result = BacktestResult(
@@ -295,7 +285,7 @@ class RSILowriderBacktester:
                 # ENTRY marker
                 ax1.scatter(
                     trade.open_time,
-                    trade.entry_price,
+                    trade.executed_price,
                     color="green",
                     marker="^",
                     s=80,

@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Iterable
+from typing import List, Iterable, Tuple
 
 from models.candle import Candle
-from models.position import Position
+from models.cycle import Cycle
+from models.account_snapshot import AccountSnapshot
 from models.trade import Trade
 from models.forex_instrument import ForexInstrument
 
@@ -34,21 +35,30 @@ class BaseBroker(ABC):
         end: datetime,
     ) -> List[Candle]:
         pass
+    
+    @abstractmethod
+    def get_candles_range(
+        self,
+        symbol: str,
+        resolution: str,
+        date_from: datetime,
+        date_to: datetime,
+    ) -> List[Candle]:
+        pass
+    
+    @abstractmethod
+    def get_current_bid_ask(self) -> Tuple[float, float]:
+        """Return (bid, ask) for the instrument."""
+        pass
+    
+    @abstractmethod
+    def get_current_spread(self) -> float:
+        """Returns spread:float for the instrument."""
+        pass
 
     # ----------------------------------------------------------------------
     # Simple trade primitives
     # ----------------------------------------------------------------------
-    @abstractmethod
-    def place_market_buy(
-        self,
-        lot_size: float,
-        tp_price: float | None = None,
-    ) -> Trade:
-        """
-        Place a market BUY order.
-        If tp_price is supplied, attach a take-profit immediately.
-        """
-        pass
 
     @abstractmethod
     def place_limit_buy(
@@ -56,7 +66,8 @@ class BaseBroker(ABC):
         entry_price: float,
         lot_size: float,
         tp_price: float | None = None,
-    ) -> Trade:
+        strategy_id: str | None = None,
+    ) -> str:
         """
         Place a LIMIT BUY order.
         If tp_price is supplied, attach a take-profit immediately.
@@ -66,6 +77,11 @@ class BaseBroker(ABC):
     @abstractmethod
     def close_trade(self, trade: Trade, exit_price: float | None = None) -> Trade:
         """Close an individual trade."""
+        pass
+    
+    @abstractmethod
+    async def close_all(self) -> bool:
+        """Close all open positions at market price and cancel all pending trades"""
         pass
 
     # ----------------------------------------------------------------------
@@ -78,6 +94,7 @@ class BaseBroker(ABC):
         tp_price: float,
         lot_size: float,
         ladder_position: int,
+        strategy_id: str
     ) -> Trade:
         """
         Atomic: create a pending LIMIT BUY with a take-profit attached.
@@ -90,14 +107,19 @@ class BaseBroker(ABC):
         pass
 
     # ----------------------------------------------------------------------
-    # Position / account view
+    # Cycle / account view
     # ----------------------------------------------------------------------
+    
+    @abstractmethod
+    def get_account_snapshot(self, date_from: datetime, date_to: datetime) -> AccountSnapshot:
+        pass
+    
     @abstractmethod
     def get_open_trades(self) -> List[Trade]:
         pass
 
     @abstractmethod
-    def get_active_position(self) -> Position | None:
+    def get_active_cycle(self) -> Cycle | None:
         pass
 
     @abstractmethod
