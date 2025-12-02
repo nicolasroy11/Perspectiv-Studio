@@ -5,9 +5,9 @@ from data.constants.forex_instruments import ForexInstruments
 
 INSTRUMENT = ForexInstruments.EURUSD
 CANDLES_RESOLUTION = "1m"
-FETCH_COUNT = 500           # how many candles we grab each run
+FETCH_COUNT = 70           # how many candles we grab each run
 INTERVAL_MINUTES = 1        # run every N minutes on the minute
-MAX_ALLOWABLE_SIMULTANEOUS_POSITIONS = 12
+MAX_ALLOWABLE_SIMULTANEOUS_POSITIONS = 3
 MAX_SPREAD_PIPS = 0.4
 
 @dataclass(frozen=True)

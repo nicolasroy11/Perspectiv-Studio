@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Literal
 
-from helpers.time import ms_to_dt
+from utils.time import ms_to_dt
 
 Side = Literal["buy", "sell"]
 

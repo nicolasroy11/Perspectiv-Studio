@@ -15,5 +15,6 @@ class AccountSnapshot:
     account_projected_balance: float
     account_cash_balance: float
     unsettled_cash: float
-    positions: List[Position]
+    activated_positions: List[Position]
+    num_pending_positions: int
     
