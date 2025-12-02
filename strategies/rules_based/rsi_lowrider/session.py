@@ -157,6 +157,7 @@ class Session:
         # 6. Strategy signal (pure: no broker inside)
         # -------------------------------------------------
         should_go_long: bool = self.signals.should_enter_long_position(candles)
+        if should_go_long: print_and_log_milestone(f"should_go_long: {should_go_long}", self.log_file_path)
 
         # -------------------------------------------------
         # 7. Ladder patching logic
@@ -170,24 +171,26 @@ class Session:
 
         # Only patch if RSI says start ladder (should_go_long) OR ladder already started (cycle_touched)
         if (should_go_long or cycle_touched) and spread_is_acceptable:
-            for depth in sorted(missing_depths):
-                entry_price: float = anchor_price - depth * config.RSI_LOWRIDER_CONFIG.RUNG_SIZE_IN_PIPS * pip
-                tp: float = entry_price + config.RSI_LOWRIDER_CONFIG.TP_TARGET_IN_PIPS * pip
+            if missing_depths:
+                print_and_log_milestone(f"missing_depths: {missing_depths}", self.log_file_path)
+                for depth in sorted(missing_depths):
+                    entry_price: float = anchor_price - depth * config.RSI_LOWRIDER_CONFIG.RUNG_SIZE_IN_PIPS * pip
+                    tp: float = entry_price + config.RSI_LOWRIDER_CONFIG.TP_TARGET_IN_PIPS * pip
 
-                bid, _ = self.broker.get_current_bid_ask()
-                if bid < entry_price:
-                    continue
+                    bid, _ = self.broker.get_current_bid_ask()
+                    if bid < entry_price:
+                        continue
 
-                self.broker.place_limit_buy(
-                    entry_price=entry_price,
-                    lot_size=config.RSI_LOWRIDER_CONFIG.LOT_SIZE,
-                    tp_price=tp,
-                    strategy_id=f"{self.current_cycle_id}_{depth}",
-                )
-                import winsound
-                winsound.Beep(1000, 1000)  # frequency=1000Hz, duration=500ms
-                
-                actions_taken.append(f"Limit buy {config.RSI_LOWRIDER_CONFIG.LOT_SIZE} lots at {entry_price} with TP {tp}")
+                    self.broker.place_limit_buy(
+                        entry_price=entry_price,
+                        lot_size=config.RSI_LOWRIDER_CONFIG.LOT_SIZE,
+                        tp_price=tp,
+                        strategy_id=f"{self.current_cycle_id}_{depth}",
+                    )
+                    import winsound
+                    winsound.Beep(1000, 1000)  # frequency=1000Hz, duration=500ms
+                    
+                    actions_taken.append(f"Limit buy {config.RSI_LOWRIDER_CONFIG.LOT_SIZE} lots at {entry_price} with TP {tp}")
 
         # -------------------------------------------------
         # 1. FINAL SNAPSHOT
