@@ -14,7 +14,7 @@ from brokers.backtest import BacktestBroker
 from models.cycle import Cycle
 from models.trade import Trade
 from strategies.rules_based.rsi_lowrider.dto.backtest_results_dto import LowriderBacktestResultsDto, LowriderCandleState
-from strategies.rules_based.rsi_lowrider.strategy import RSILowriderStrategy
+from strategies.rules_based.rsi_lowrider.market_signals import RSILowriderSignals
 from strategies.rules_based.rsi_lowrider.logger import BacktestLogger
 from web.trader_backend.schemas.backtest import BacktestRequest, RsiLowriderBacktestRequest
 
@@ -38,7 +38,7 @@ class PositionEvents:
 class RSILowriderBacktester:
 
     def __init__(self):
-        self.strategy = RSILowriderStrategy()
+        self.strategy = RSILowriderSignals()
         self.instrument = ForexInstrument(
                             symbol="EURUSD",
                             pip_size=0.0001,
@@ -68,7 +68,7 @@ class RSILowriderBacktester:
     
     async def get_backtest_results(self, request: RsiLowriderBacktestRequest) -> LowriderBacktestResultsDto:
 
-        strategy = RSILowriderStrategy()
+        strategy = RSILowriderSignals()
         broker = BacktestBroker()
 
         # -------------------------

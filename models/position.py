@@ -14,7 +14,7 @@ class Position:
     A position is the combination of one opening trade and its corresponding closing trade (or trades if partial closes are accepted)
     '''
     id: str
-    status: str
+    status: Literal['closed', 'active']
     cycle_id: str
     symbol: str
     lot_size: float
@@ -38,7 +38,7 @@ class Position:
     position_depth: int
     
     @staticmethod
-    def from_tradelocker_trades(trades: List[Trade], current_price: float, cycle_id: str, instrument: ForexInstrument) -> List['Position']:
+    def from_tradelocker_trades(trades: List[Trade], instrument: ForexInstrument) -> List['Position']:
         positions = []
         trades_by_position = defaultdict(list)
         for t in trades:
@@ -48,10 +48,10 @@ class Position:
             if position_id is None: continue
             real_trades = [trade for trade in trades if trade.status!='cancelled' and trade.status!='refused']
             real_trades.sort(key=lambda trade: trade.open_time)
-            if len(real_trades) != 2:
-                t = 0
+            
             opening_trade = real_trades[0]
             closing_trade  = real_trades[-1]
+            cycle_id = opening_trade.custom_id
             position_depth = Trade._extract_position_depth(opening_trade)
             open_time = opening_trade.open_time
             entry_price = opening_trade.executed_price
@@ -72,20 +72,20 @@ class Position:
                 net_pnl = round(gross_pnl - commission, 2)
             else:
                 close_time = None
-                exit_price = current_price
+                exit_price = None
                 status='active'
                 
-                pip_diff = (current_price - opening_trade.executed_price) / instrument.pip_size
+                pip_diff = 0.0
                 pip_value = instrument.dollars_per_pip_per_lot * lot_size
-                gross_pnl = round(pip_diff * pip_value, 2)
-                net_pnl = round(gross_pnl - commission, 2)
+                gross_pnl = 0.0
+                net_pnl = 0.0
             
             tp_price = opening_trade.tp_price
             
             positions.append(Position(
                 id=position_id,
-                cycle_id=cycle_id,
                 symbol=symbol,
+                cycle_id=cycle_id,
                 status=status,
                 side=side,
                 open_time=open_time,

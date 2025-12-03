@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from models.forex_instrument import ForexInstrument
 
-
+@dataclass
 class ForexInstruments:
 
     EURUSD = ForexInstrument(

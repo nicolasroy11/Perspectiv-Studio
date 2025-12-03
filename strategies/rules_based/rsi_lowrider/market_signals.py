@@ -7,7 +7,7 @@ import session_config as config
 
 rsi_lowrider_config = config.RSI_LOWRIDER_CONFIG
 
-class RSILowriderStrategy:
+class RSILowriderSignals:
 
     def __init__(self):
         self.candles: List[Candle] = []
@@ -23,7 +23,7 @@ class RSILowriderStrategy:
 
         return float(val) if not pd.isna(val) else 0.0
     
-    def should_enter_long_position(self, candles: List[Candle]):
+    def should_enter_long_position(self, candles: List[Candle]) -> bool:
         # 1) Compute RSI for this candle
         current_rsi = self.compute_rsi(candles)
 

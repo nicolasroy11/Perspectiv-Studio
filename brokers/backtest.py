@@ -11,7 +11,7 @@ import pandas as pd
 from brokers.base import BaseBroker
 from brokers.tradelocker import TradeLockerBroker
 from models.trade import Trade, Side
-from models.position import Position
+from models.cycle import Cycle
 from models.candle import Candle
 import runtime_settings as rs
 
@@ -42,8 +42,8 @@ class BacktestBroker(BaseBroker):
         # Expected columns: timestamp,open,high,low,close,volume
         self.csv_path = csv_path
 
-        self.positions: List[Position] = []  # all positions ever created, open or closed
-        self.current_position: Optional[Position] = None
+        self.positions: List[Cycle] = []  # all positions ever created, open or closed
+        self.current_position: Optional[Cycle] = None
 
         # These are set as candles are processed
         self._current_timestamp: Optional[datetime] = None
@@ -62,9 +62,9 @@ class BacktestBroker(BaseBroker):
             not self.current_position.is_closed
         )
 
-    def open_new_position(self) -> Position:
+    def open_new_position(self) -> Cycle:
         """Called automatically when placing the anchor."""
-        pos = Position(symbol=self.symbol, trades=[])
+        pos = Cycle(symbol=self.symbol, positions=[])
         self.positions.append(pos)
         self.current_position = pos
         return pos
@@ -165,11 +165,11 @@ class BacktestBroker(BaseBroker):
 
         trade = Trade(
             id=self._generate_trade_id(),
-            position_id=None,         # set later
+            cycle_id=None,         # set later
             symbol=symbol,
             side=side,
             lot_size=lot_size,
-            entry_price=entry_price,
+            executed_price=entry_price,
             open_time=now,
             tp_price=tp_price,
             sl_price=sl_price,
@@ -180,8 +180,8 @@ class BacktestBroker(BaseBroker):
 
         pos = self.open_new_position()
 
-        trade.position_id = id(pos)
-        pos.trades.append(trade)
+        trade.cycle_id = id(pos)
+        pos.positions.append(trade)
 
         return trade
 
@@ -200,11 +200,11 @@ class BacktestBroker(BaseBroker):
 
         trade = Trade(
             id=self._generate_trade_id(),
-            position_id=None,
+            cycle_id=None,
             symbol=symbol,
             side=side,
             lot_size=lot_size,
-            entry_price=limit_price,
+            executed_price=limit_price,
             open_time=now,
             tp_price=tp_price,
             sl_price=sl_price,
@@ -218,18 +218,18 @@ class BacktestBroker(BaseBroker):
         else:
             position = self.current_position
 
-        trade.position_id = id(position)
-        position.trades.append(trade)
+        trade.cycle_id = id(position)
+        position.positions.append(trade)
 
         return trade
 
-    def get_open_positions(self) -> Optional[Position]:
+    def get_open_positions(self) -> Optional[Cycle]:
         """Returns the single current position (if open)."""
         if self.position_is_open():
             return self.current_position
         return None
 
-    def get_all_positions(self) -> List[Position]:
+    def get_all_positions(self) -> List[Cycle]:
         return self.positions
 
     # ----------------------------------------------------------------------
@@ -255,15 +255,15 @@ class BacktestBroker(BaseBroker):
         position = self.current_position
 
         # 1) Fill pending limit buys if candle trades through limit price
-        for trade in position.trades:
-            if trade.is_pending and candle.low <= trade.entry_price <= candle.high:
+        for trade in position.positions:
+            if trade.is_pending and candle.low <= trade.executed_price <= candle.high:
                 trade.is_pending = False
                 trade.open_time = candle.timestamp
 
         # 2) Take profits — ONLY ONE TP PER CANDLE
         #    Pick the highest TP available that can be hit
         filled_tps = [
-            trade for trade in position.trades
+            trade for trade in position.positions
             if (not trade.is_pending) and trade.exit_price is None and trade.tp_price is not None
         ]
 
@@ -374,9 +374,9 @@ class BacktestBroker(BaseBroker):
             return []
 
         position = self.current_position
-        return [t for t in position.trades if t.exit_price is None]
+        return [t for t in position.positions if t.exit_price is None]
 
-    def get_active_position(self) -> Position | None:
+    def get_active_cycle(self) -> Cycle | None:
         """
         Single active position (if any).
         """
@@ -393,7 +393,7 @@ class BacktestBroker(BaseBroker):
 
         position = self.current_position
 
-        for trade in position.trades:
+        for trade in position.positions:
             if trade.exit_price is None:
                 flattened.append(self.close_trade(trade))
 
@@ -412,27 +412,27 @@ class BacktestBroker(BaseBroker):
         """
         total = 0.0
         for pos in self.positions:
-            for t in pos.trades:
+            for t in pos.positions:
                 if t.exit_price is not None:
                     # If the trade model already has realized_pnl, use it.
                     if t.realized_pnl is not None:
                         total += t.realized_pnl
                     else:
                         # fallback computation
-                        total += (t.exit_price - t.entry_price) * t.lot_size * 10000
+                        total += (t.exit_price - t.executed_price) * t.lot_size * 10000
         return total
 
     def unrealized_pnl(self, current_price: float) -> float:
         """
         Sum of unrealized PnL for the *active* position only.
         """
-        pos = self.get_active_position()
+        pos = self.get_active_cycle()
         if pos is None:
             return 0.0
 
         total = 0.0
-        for t in pos.trades:
+        for t in pos.positions:
             if t.exit_price is None:  # open trade
-                total += (current_price - t.entry_price) * t.lot_size * 10000
+                total += (current_price - t.executed_price) * t.lot_size * 10000
 
         return total

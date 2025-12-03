@@ -33,15 +33,10 @@
 #     )
 
 
-
-import pytest
-import pandas as pd
 from datetime import datetime, timedelta
 
-from strategies.rules_based.rsi_lowrider.dto.backtest_results_dto import LowriderBacktestResultsDto, LowriderCandleState
-from strategies.rules_based.rsi_lowrider.strategy import (
-    RSILowriderStrategy,
-    RSILowriderConfig,
+from strategies.rules_based.rsi_lowrider.market_signals import (
+    RSILowriderSignals,
 )
 from brokers.backtest import BacktestBroker
 from models.candle import Candle
@@ -83,14 +78,7 @@ def test_anchor_trigger_rsi_curl():
     Verify the strategy fires exactly one anchor entry.
     """
 
-    config = RSILowriderConfig(
-        rsi_period=3,
-        rsi_oversold_level=30,
-        rung_size_in_pips=2.0,
-        tp_target_in_pips=2.0,
-        lot_size=1.0,
-    )
-    strategy = RSILowriderStrategy(config)
+    strategy = RSILowriderSignals()
     broker = BacktestBroker()
 
     # Prices falling then rising → clear RSI dip then curl-up
@@ -103,9 +91,9 @@ def test_anchor_trigger_rsi_curl():
         strategy.on_candle_just_closed(broker, candle)
         broker.process_candle(candle)
 
-        if len(broker.positions) > 0 and broker.positions[0].trades:
+        if len(broker.positions) > 0 and broker.positions[0].positions:
             # Anchor = first BUY trade created
-            if broker.positions[0].trades[0].ladder_position == 0:
+            if broker.positions[0].positions[0].ladder_position == 0:
                 anchor_count = 1
 
     assert anchor_count == 1, "Anchor entry should trigger exactly once"
@@ -115,14 +103,8 @@ def test_anchor_trigger_rsi_curl():
 # Test 2 — ladder adds next rung ONLY after deepest rung fills
 # ---------------------------------------------------------
 def test_ladder_adds_next_rung_only_after_fill():
-    config = RSILowriderConfig(
-        rsi_period=2,
-        rsi_oversold_level=30,
-        rung_size_in_pips=2.0,
-        tp_target_in_pips=2.0,
-        lot_size=1.0,
-    )
-    strategy = RSILowriderStrategy(config)
+
+    strategy = RSILowriderSignals()
     broker = BacktestBroker()
 
     # Trigger anchor: RSI dip & curl
@@ -133,11 +115,11 @@ def test_ladder_adds_next_rung_only_after_fill():
         strategy.on_candle_just_closed(broker, candle)
         broker.process_candle(candle)
 
-    position = broker.get_active_position()
+    position = broker.get_active_cycle()
     assert position is not None
-    assert len(position.trades) == 2  # anchor + rung1
+    assert len(position.positions) == 2  # anchor + rung1
 
-    rung1 = position.trades[1]
+    rung1 = position.positions[1]
     assert rung1.is_pending, "First rung should be pending until price fills"
 
 
@@ -145,14 +127,8 @@ def test_ladder_adds_next_rung_only_after_fill():
 # Test 3 — TP hit increments closed-trades count
 # ---------------------------------------------------------
 def test_tp_hit_detected_by_closed_trade_change():
-    config = RSILowriderConfig(
-        rsi_period=2,
-        rsi_oversold_level=30,
-        rung_size_in_pips=2.0,
-        tp_target_in_pips=2.0,
-        lot_size=1.0,
-    )
-    strategy = RSILowriderStrategy(config)
+
+    strategy = RSILowriderSignals()
     broker = BacktestBroker()
 
     # Prices dipping then rising so anchor triggers early
@@ -164,22 +140,22 @@ def test_tp_hit_detected_by_closed_trade_change():
         strategy.on_candle_just_closed(broker, candle)
         broker.process_candle(candle)
 
-    position = broker.get_active_position()
+    position = broker.get_active_cycle()
     assert position is not None
 
     # Now produce a high enough candle to hit TP
-    tp_price = position.trades[0].tp_price
+    tp_price = position.positions[0].tp_price
     hit_tp_candle = make_candle(datetime(2024, 1, 1, 0, 20), tp_price + 0.0001)
 
     prev_closed = sum(
-        1 for p in broker.positions for t in p.trades if t.exit_price is not None
+        1 for p in broker.positions for t in p.positions if t.exit_price is not None
     )
 
     strategy.on_candle_just_closed(broker, hit_tp_candle)
     broker.process_candle(hit_tp_candle)
 
     now_closed = sum(
-        1 for p in broker.positions for t in p.trades if t.exit_price is not None
+        1 for p in broker.positions for t in p.positions if t.exit_price is not None
     )
 
     assert now_closed == prev_closed + 1, "A TP hit should increment closed trades by 1"

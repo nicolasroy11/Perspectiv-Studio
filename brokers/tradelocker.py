@@ -1,5 +1,6 @@
 from __future__ import annotations
 from asyncio import sleep
+from dataclasses import dataclass
 
 import requests
 from datetime import datetime, timedelta, timezone
@@ -12,20 +13,21 @@ from data.constants.forex_instruments import ForexInstruments
 from models.position import Position
 import runtime_settings as rs
 from models.candle import Candle
-from models.trade import Trade, Side
+from models.trade import Trade
 from brokers.base import BaseBroker
 
-
+@dataclass
 class TLInstrument(ForexInstrument):
-    tradable_id: int
-    info_route_id: int
-    trade_route_id: int
+    tradable_id: int = 0
+    info_route_id: int = 0
+    trade_route_id: int = 0
     
 class APIMappings:
     account_status: List[str]
     orders_history_mappings: List[str]
+    orders_mappings: List[str]
+    filled_orders_mappings: List[str]
     
-
 
 class TradeLockerBroker(BaseBroker):
     """
@@ -48,7 +50,7 @@ class TradeLockerBroker(BaseBroker):
         password: str = rs.TRADELOCKER_PASSWORD,
         server: str = rs.TRADELOCKER_SERVER,
         base_url: str = rs.TRADELOCKER_BASE_API_URL,
-        instrument: ForexInstrument = ForexInstruments.EURUSD,
+        instrument_name: str = 'EURUSD',
         account_id: Optional[str] = None,
     ):
         self.email = email
@@ -69,7 +71,12 @@ class TradeLockerBroker(BaseBroker):
         if self.account_id is None:
             self.auto_assign_account()
             
-        self.set_instrument_parameters(instrument)
+        self.set_instrument_parameters(instrument_name)
+        
+        
+    def refresh(self):
+        
+        self.set_api_mappings()
 
 
     # ----------------------------------------------------------------------
@@ -97,7 +104,7 @@ class TradeLockerBroker(BaseBroker):
         return {
             "accept": "application/json",
             "Authorization": f"Bearer {self.token}",
-            "accNum": "1",
+            "accNum": "2",
         }
         
     def ping(self) -> bool:
@@ -121,31 +128,39 @@ class TradeLockerBroker(BaseBroker):
 
         self.account_id = accounts[0]["id"]
 
-    def set_instrument_parameters(self, instrument: ForexInstrument):
+    def set_instrument_parameters(self, instrument_name: str):
         url = f"{self.base_url}/trade/accounts/{self.account_id}/instruments"
         r = requests.get(url, headers=self.get_auth_headers())
         if r.status_code != 200:
             raise RuntimeError(f"Could not fetch instruments: {r.text}")
 
         instruments = r.json()
-        selected_instrument = [item for item in instruments['d']['instruments'] if item["name"]==instrument.symbol][0]
-        self.instrument: TLInstrument = instrument
+        selected_instrument = [item for item in instruments['d']['instruments'] if item["name"]==instrument_name][0]
+        
         _info_route = [route for route in selected_instrument['routes'] if route["type"]=='INFO'][0]
         _trade_route = [route for route in selected_instrument['routes'] if route["type"]=='TRADE'][0]
-        self.instrument.info_route_id = _info_route['id']
-        self.instrument.trade_route_id = _trade_route['id']
-        self.instrument.tradable_id = selected_instrument['tradableInstrumentId']
+        init: ForexInstrument = getattr(ForexInstruments, instrument_name)
+        self.instrument = TLInstrument(
+            symbol = instrument_name,
+            pip_size = init.pip_size,
+            dollars_per_pip_per_lot = init.dollars_per_pip_per_lot,
+            info_route_id = _info_route['id'],
+            trade_route_id = _trade_route['id'],
+            tradable_id = selected_instrument['tradableInstrumentId']
+        )
         
         
-    def get_api_mappings(self) -> APIMappings:
+    def set_api_mappings(self):
         mappings = APIMappings()
         url: str = f"{self.base_url}/trade/config"
         headers: dict = self.get_auth_headers()
         r = requests.get(url, headers=headers)
         config_data: dict = r.json()
+        mappings.orders_mappings = [field['id'] for field in config_data['d']['ordersConfig']['columns']]
+        mappings.filled_orders_mappings = [field['id'] for field in config_data['d']['filledOrdersConfig']['columns']]
         mappings.orders_history_mappings = [field['id'] for field in config_data['d']['ordersHistoryConfig']['columns']]
         mappings.account_status = [field['id'] for field in config_data['d']['accountDetailsConfig']['columns']]
-        return mappings
+        self.api_mappings = mappings
 
 
     # ----------------------------------------------------------------------
@@ -371,17 +386,17 @@ class TradeLockerBroker(BaseBroker):
         Fetch most recent cycle state.
         """
         
-        mappings = self.get_api_mappings()
         headers: dict = self.get_auth_headers()
+        
+        pending_positions = self.get_all_pending_positions()
         
         url: str = f"{self.base_url}/trade/accounts/{self.account_id}/state"
         r = requests.get(url, headers=headers)
         json: dict = r.json()
         
-        keys = mappings.account_status
+        keys = self.api_mappings.account_status
         values = json["d"]["accountDetailsData"]
         account_state_dict = TradeLockerBroker.make_dict(keys, values)
-        print("account_state_dict: ", str(account_state_dict))
         
         from_ms = int(date_from.timestamp() * 1000)
         to_ms = int(date_to.timestamp() * 1000)
@@ -396,7 +411,7 @@ class TradeLockerBroker(BaseBroker):
         url: str = f"{self.base_url}/trade/accounts/{self.account_id}/ordersHistory"
         r = requests.get(url, params=params, headers=headers)
         json: dict = r.json()
-        keys = mappings.orders_history_mappings
+        keys = self.api_mappings.orders_history_mappings
         
         if "d" not in json or "ordersHistory" not in json["d"]:
             raise RuntimeError(f"TraderLocker error: {json}")
@@ -406,25 +421,43 @@ class TradeLockerBroker(BaseBroker):
         trades = [Trade.from_tradelocker_order_history_row(values, keys) for values in order_hist_data]
         
         bid, ask = self.get_current_bid_ask()
-        positions = Position.from_tradelocker_trades(trades=trades, current_price=ask, instrument=self.instrument, cycle_id='test')
+        positions = Position.from_tradelocker_trades(trades=trades, instrument=self.instrument)
         
         gross_pnl = sum([p.gross_pnl for p in positions])
         net_pnl = sum([p.net_pnl for p in positions])
         
         return AccountSnapshot(
-            cycle_gross_pnl=gross_pnl,
-            cycle_net_pnl=net_pnl,
+            cycle_open_gross_pnl=gross_pnl,
+            cycle_open_net_pnl=net_pnl,
             account_open_gross_pnl=account_state_dict['openGrossPnL'],
             account_open_net_pnl=account_state_dict['openNetPnL'],
             account_balance=account_state_dict['balance'],
             account_projected_balance=account_state_dict['projectedBalance'],
             account_cash_balance=account_state_dict['cashBalance'],
             unsettled_cash=account_state_dict['unsettledCash'],
-            positions=positions
+            activated_positions=positions,
+            num_pending_positions = len(pending_positions)
         )
+        
+    
+    def get_all_pending_positions(self):
+        pending_positions = []
+        headers: dict = self.get_auth_headers()
+        headers['accountId'] = self.account_id
+        headers['tradableInstrumentId'] = str(self.instrument.tradable_id)
+        url: str = f"{self.base_url}/trade/accounts/{self.account_id}/orders"
+        r = requests.get(url, headers=headers)
+        keys = self.api_mappings.orders_mappings
+        json: dict = r.json()
+        if r.status_code != 200:
+            t = 0
+        orders = json["d"]["orders"]
+        if orders:
+            pending_positions = [Position.from_tradelocker_trades([Trade.from_tradelocker_order_history_row(o, keys) for o in orders], instrument=self.instrument)]
+        return pending_positions
     
     
-    def cancel_all_orders(self):
+    def cancel_all_pending_positions(self):
         headers: dict = self.get_auth_headers()
         headers['accountId'] = self.account_id
         headers['tradableInstrumentId'] = str(self.instrument.tradable_id)
@@ -457,7 +490,7 @@ class TradeLockerBroker(BaseBroker):
         self.close_all_active_positions()
         
         # cancel all pending orders
-        self.cancel_all_orders()
+        self.cancel_all_pending_positions()
         
         return True
     

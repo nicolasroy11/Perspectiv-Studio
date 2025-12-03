@@ -24,6 +24,11 @@ class BaseBroker(ABC):
     def __init__(self, instrument: ForexInstrument):
         self.instrument = instrument
 
+    @abstractmethod
+    def refresh(self):
+        """Handles necessary cycling of broker API parameters, ie. they changed their API payload keys."""
+        pass
+
     # ----------------------------------------------------------------------
     # Market data
     # ----------------------------------------------------------------------
