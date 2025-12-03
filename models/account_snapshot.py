@@ -7,8 +7,8 @@ from models.position import Position
 
 @dataclass
 class AccountSnapshot:
-    cycle_gross_pnl: float
-    cycle_net_pnl: float
+    cycle_open_gross_pnl: float
+    cycle_open_net_pnl: float
     account_open_gross_pnl: float
     account_open_net_pnl: float
     account_balance: float

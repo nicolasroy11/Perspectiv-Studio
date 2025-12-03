@@ -4,6 +4,7 @@ import time
 from typing import List
 import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import winsound
 
 from brokers.base import BaseBroker
 from models.account_snapshot import AccountSnapshot
@@ -152,12 +153,15 @@ class Session:
         # -------------------------------------------------
         spread: float = self.broker.get_current_spread()
         spread_is_acceptable = spread <= config.MAX_SPREAD_PIPS
-
+        
         # -------------------------------------------------
         # 6. Strategy signal (pure: no broker inside)
         # -------------------------------------------------
         should_go_long: bool = self.signals.should_enter_long_position(candles)
-        if should_go_long: print_and_log_milestone(f"should_go_long: {should_go_long}", self.log_file_path)
+        if should_go_long:
+            print_and_log_milestone(f"should_go_long: {should_go_long}", self.log_file_path)
+            
+            winsound.Beep(500, 1000)  # frequency=1000Hz, duration=1000ms
 
         # -------------------------------------------------
         # 7. Ladder patching logic
@@ -174,7 +178,7 @@ class Session:
             if missing_depths:
                 print_and_log_milestone(f"missing_depths: {missing_depths}", self.log_file_path)
                 for depth in sorted(missing_depths):
-                    entry_price: float = anchor_price - depth * config.RSI_LOWRIDER_CONFIG.RUNG_SIZE_IN_PIPS * pip
+                    entry_price: float = anchor_price - depth * config.RSI_LOWRIDER_CONFIG.POSITION_DISTANCE_IN_PIPS * pip
                     tp: float = entry_price + config.RSI_LOWRIDER_CONFIG.TP_TARGET_IN_PIPS * pip
 
                     bid, _ = self.broker.get_current_bid_ask()
@@ -187,7 +191,6 @@ class Session:
                         tp_price=tp,
                         strategy_id=f"{self.current_cycle_id}_{depth}",
                     )
-                    import winsound
                     winsound.Beep(1000, 1000)  # frequency=1000Hz, duration=500ms
                     
                     actions_taken.append(f"Limit buy {config.RSI_LOWRIDER_CONFIG.LOT_SIZE} lots at {entry_price} with TP {tp}")
@@ -235,13 +238,15 @@ class Session:
 
 
     def log_state(self, latest_candle: Candle, snapshot: AccountSnapshot, actions_taken: List[str]=[]):
+        positions = snapshot.activated_positions
         print_and_log_info(f"[CANDLE CLOSED] {latest_candle.timestamp}", self.log_file_path)
         print()
         
-        print_and_log_info(f"acct_open_gross_pnl:      {snapshot.account_open_gross_pnl:.5f}", self.log_file_path)
-        print_and_log_info(f"acct_open_net_pnl:        {snapshot.account_open_net_pnl:.5f}", self.log_file_path)
-        print_and_log_info(f"cycle_gross_pnl:          {snapshot.cycle_gross_pnl:.5f}", self.log_file_path)
-        print_and_log_info(f"cycle_net_pnl:            {snapshot.cycle_net_pnl:.5f}", self.log_file_path)
+        print_and_log_info(f"acct_open_gross_pnl:      {snapshot.account_open_gross_pnl:.2f}", self.log_file_path)
+        print_and_log_info(f"acct_open_net_pnl:        {snapshot.account_open_net_pnl:.2f}", self.log_file_path)
+        print_and_log_info(f"cycle_open_gross_pnl:     {snapshot.cycle_open_gross_pnl:.2f}", self.log_file_path)
+        print_and_log_info(f"cycle_open_net_pnl:       {snapshot.cycle_open_net_pnl:.2f}", self.log_file_path)
+        print_and_log_info(f"cycle_net_realized_pnl:   {sum([p.net_pnl for p in positions if p.status=='closed']):.2f}", self.log_file_path)
         print()
         
         print_and_log_info("Price:", self.log_file_path)
@@ -260,7 +265,7 @@ class Session:
         print_and_log_milestone(f"Actions taken: {actions_taken}", self.log_file_path)
         print()
 
-        positions = snapshot.activated_positions
+        
         if positions: deepest = max(p.position_depth for p in positions)
         print_and_log_info("Cycle:", self.log_file_path)
         print_and_log_info(f"  Pending positions:   {snapshot.num_pending_positions}", self.log_file_path)

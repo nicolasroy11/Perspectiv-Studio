@@ -421,14 +421,14 @@ class TradeLockerBroker(BaseBroker):
         trades = [Trade.from_tradelocker_order_history_row(values, keys) for values in order_hist_data]
         
         bid, ask = self.get_current_bid_ask()
-        positions = Position.from_tradelocker_trades(trades=trades, current_price=ask, instrument=self.instrument, cycle_id='test')
+        positions = Position.from_tradelocker_trades(trades=trades, instrument=self.instrument)
         
         gross_pnl = sum([p.gross_pnl for p in positions])
         net_pnl = sum([p.net_pnl for p in positions])
         
         return AccountSnapshot(
-            cycle_gross_pnl=gross_pnl,
-            cycle_net_pnl=net_pnl,
+            cycle_open_gross_pnl=gross_pnl,
+            cycle_open_net_pnl=net_pnl,
             account_open_gross_pnl=account_state_dict['openGrossPnL'],
             account_open_net_pnl=account_state_dict['openNetPnL'],
             account_balance=account_state_dict['balance'],
@@ -453,7 +453,7 @@ class TradeLockerBroker(BaseBroker):
             t = 0
         orders = json["d"]["orders"]
         if orders:
-            pending_positions = [Trade.from_tradelocker_order_history_row(o, keys) for o in orders]
+            pending_positions = [Position.from_tradelocker_trades([Trade.from_tradelocker_order_history_row(o, keys) for o in orders], instrument=self.instrument)]
         return pending_positions
     
     
