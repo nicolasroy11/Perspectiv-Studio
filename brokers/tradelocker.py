@@ -104,7 +104,7 @@ class TradeLockerBroker(BaseBroker):
         return {
             "accept": "application/json",
             "Authorization": f"Bearer {self.token}",
-            "accNum": "1",
+            "accNum": "2",
         }
         
     def ping(self) -> bool:
